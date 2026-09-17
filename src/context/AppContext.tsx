@@ -83,9 +83,26 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Routing state based on browser pathname
+  // Helper to extract clean path from pathname or hash fallback
+  const resolveCurrentPath = (): string => {
+    // 1. Check if pathname has a route (like /admin, /services, etc.)
+    const pathname = window.location.pathname || '/';
+    if (pathname !== '/' && pathname.trim() !== '') {
+      return pathname.replace(/\/+$/, '') || '/';
+    }
+    // 2. Hash fallback (e.g., /#admin or /#/admin or /#contact)
+    if (window.location.hash) {
+      const hash = window.location.hash.replace(/^#\/?/, '/');
+      if (hash.startsWith('/admin') || hash.length > 1) {
+        return hash.split('?')[0].replace(/\/+$/, '') || '/';
+      }
+    }
+    return '/';
+  };
+
+  // Routing state based on browser pathname or hash fallback
   const [currentPath, setCurrentPath] = useState<string>(() => {
-    return window.location.pathname || '/';
+    return resolveCurrentPath();
   });
 
   // DB States
@@ -107,13 +124,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [quotePreselectedService, setQuotePreselectedService] = useState<string | undefined>(undefined);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  // Sync with window history
+  // Sync with window history and hash changes
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname || '/');
+    const handleUrlChange = () => {
+      setCurrentPath(resolveCurrentPath());
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
   }, []);
 
   // Listen to DB updates
