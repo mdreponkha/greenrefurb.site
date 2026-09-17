@@ -1,0 +1,8 @@
+{
+  "name": "Remix Green Refurb",
+  "description": "Professional Painting, Decorating, Carpentry, Electrical, Plumbing, Custom Wardrobes \u0026 Kitchen Installation in London, UK.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
