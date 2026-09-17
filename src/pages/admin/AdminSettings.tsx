@@ -17,12 +17,21 @@ import {
 } from 'lucide-react';
 import { firestoreSync } from '../../db/firestoreSync';
 
+import { compressImageFile } from '../../utils/imageCompressor';
+
 export const AdminSettings: React.FC = () => {
   const { settings, updateSettings, isFirebaseConnected, firebaseLastSync, services, projects, gallery, testimonials, enquiries, allSEO, homepage } = useApp();
   const [formData, setFormData] = useState({ ...settings });
   const [saved, setSaved] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Sync with context if settings loaded from Firestore
+  React.useEffect(() => {
+    if (settings) {
+      setFormData(prev => ({ ...settings, ...prev }));
+    }
+  }, [settings]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,29 +40,27 @@ export const AdminSettings: React.FC = () => {
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData(prev => ({ ...prev, logoUrl: reader.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 600, maxHeight: 600, quality: 0.85 });
+        setFormData(prev => ({ ...prev, logoUrl: compressed }));
+      } catch (err) {
+        console.error('Failed to compress logo', err);
+      }
     }
   };
 
-  const handleFaviconFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFaviconFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData(prev => ({ ...prev, faviconUrl: reader.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 128, maxHeight: 128, quality: 0.85 });
+        setFormData(prev => ({ ...prev, faviconUrl: compressed }));
+      } catch (err) {
+        console.error('Failed to compress favicon', err);
+      }
     }
   };
 

@@ -9,13 +9,24 @@ import {
   X,
   Sparkles,
   MapPin,
-  Calendar
+  Calendar,
+  Upload,
+  Check,
+  Loader2
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export const AdminTestimonials: React.FC = () => {
   const { testimonials, addTestimonial, updateTestimonial, deleteTestimonial } = useApp();
   const [editing, setEditing] = useState<TestimonialItem | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const showNotification = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), 3000);
+  };
 
   const emptyTestimonial: TestimonialItem = {
     id: `test-${Date.now()}`,
@@ -38,14 +49,32 @@ export const AdminTestimonials: React.FC = () => {
     setIsNew(false);
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploading(true);
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 400, maxHeight: 400, quality: 0.8 });
+        setEditing(prev => prev ? { ...prev, photo: compressed } : null);
+      } catch (err) {
+        console.error('Error compressing avatar', err);
+        showNotification('Failed to process image. Please try another photo.');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
 
     if (isNew) {
       addTestimonial(editing);
+      showNotification(`Testimonial from "${editing.name}" added and synced!`);
     } else {
       updateTestimonial(editing);
+      showNotification(`Testimonial from "${editing.name}" updated and synced!`);
     }
     setEditing(null);
   };
@@ -53,6 +82,7 @@ export const AdminTestimonials: React.FC = () => {
   const handleDelete = (id: string, name: string) => {
     if (confirm(`Delete review from "${name}"?`)) {
       deleteTestimonial(id);
+      showNotification(`Testimonial from "${name}" deleted successfully!`);
     }
   };
 
@@ -66,13 +96,22 @@ export const AdminTestimonials: React.FC = () => {
             Manage customer feedback, ratings, and quotes displayed on the public homepage & service pages
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Testimonial</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {feedback && (
+            <div className="px-3 py-1.5 bg-[#EAF5EC] text-[#315C3A] border border-[#DCEBDD] rounded-xl text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <Check className="w-3.5 h-3.5 text-[#6FAF7B]" />
+              <span>{feedback}</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Testimonial</span>
+          </button>
+        </div>
       </div>
 
       {/* Testimonials List */}
@@ -215,15 +254,37 @@ export const AdminTestimonials: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-[#202820] mb-1">
-                  Avatar / Client Photo URL
+                  Avatar / Client Photo (URL or Device Upload)
                 </label>
-                <input
-                  type="url"
-                  value={editing.photo || ''}
-                  onChange={e => setEditing({ ...editing, photo: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={editing.photo || ''}
+                    onChange={e => setEditing({ ...editing, photo: e.target.value })}
+                    placeholder="https://images.unsplash.com/..."
+                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
+                  />
+                  <label className="px-3.5 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                        <span>Optimizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                        <span>Upload</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isUploading}
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
 
               <div>

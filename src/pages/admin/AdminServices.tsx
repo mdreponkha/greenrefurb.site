@@ -12,25 +12,41 @@ import {
   Image,
   Sparkles,
   Search,
-  Upload
+  Upload,
+  Loader2
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export const AdminServices: React.FC = () => {
   const { services, addService, updateService, deleteService } = useApp();
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [search, setSearch] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const showNotification = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setEditingService(prev => prev ? { ...prev, image: reader.result as string } : null);
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadingImage(true);
+      try {
+        const compressed = await compressImageFile(file, {
+          maxWidth: 1400,
+          maxHeight: 1200,
+          quality: 0.82
+        });
+        setEditingService(prev => prev ? { ...prev, image: compressed } : null);
+      } catch (err) {
+        console.error('Error compressing service image', err);
+        showNotification('Failed to process image. Please try another file.');
+      } finally {
+        setUploadingImage(false);
+      }
     }
   };
 
@@ -78,8 +94,10 @@ export const AdminServices: React.FC = () => {
 
     if (isNew) {
       addService(editingService);
+      showNotification(`Service "${editingService.title}" created and synced!`);
     } else {
       updateService(editingService);
+      showNotification(`Service "${editingService.title}" updated and synced!`);
     }
     setEditingService(null);
   };
@@ -87,11 +105,13 @@ export const AdminServices: React.FC = () => {
   const handleDelete = (id: string, title: string) => {
     if (confirm(`Are you sure you want to delete "${title}"?`)) {
       deleteService(id);
+      showNotification(`Service "${title}" deleted successfully!`);
     }
   };
 
   const togglePublish = (service: ServiceItem) => {
     updateService({ ...service, published: !service.published });
+    showNotification(`Service visibility updated!`);
   };
 
   const filtered = services.filter(s =>
@@ -109,13 +129,22 @@ export const AdminServices: React.FC = () => {
             Create, update, reorder or publish the 14 trade & refurbishment services
           </p>
         </div>
-        <button
-          onClick={handleCreateNew}
-          className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Service</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {feedback && (
+            <div className="px-3 py-1.5 bg-[#EAF5EC] text-[#315C3A] border border-[#DCEBDD] rounded-xl text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <Check className="w-3.5 h-3.5 text-[#6FAF7B]" />
+              <span>{feedback}</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleCreateNew}
+            className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Service</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Filter */}
@@ -291,11 +320,21 @@ export const AdminServices: React.FC = () => {
                     className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
                   />
                   <label className="px-3.5 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
-                    <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
-                    <span>Upload Photo</span>
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                        <span>Optimizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={uploadingImage}
                       onChange={handleImageUpload}
                       className="hidden"
                     />

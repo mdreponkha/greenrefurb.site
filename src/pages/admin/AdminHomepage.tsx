@@ -1,42 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Check, Sparkles, Upload } from 'lucide-react';
+import { Check, Sparkles, Upload, Loader2 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export const AdminHomepage: React.FC = () => {
   const { homepage, updateHomepage } = useApp();
   const [formData, setFormData] = useState({ ...homepage });
   const [saved, setSaved] = useState(false);
+  const [uploadingHero, setUploadingHero] = useState(false);
+  const [uploadingIntro, setUploadingIntro] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Sync if context updates from Firestore on load
+  useEffect(() => {
+    if (homepage) {
+      setFormData(prev => ({
+        ...homepage,
+        // preserve uncommitted text fields if user is currently editing
+        ...prev
+      }));
+    }
+  }, [homepage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     updateHomepage(formData);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData(prev => ({ ...prev, heroImage: reader.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadingHero(true);
+      setUploadError(null);
+      try {
+        const compressedBase64 = await compressImageFile(file, {
+          maxWidth: 1600,
+          maxHeight: 1200,
+          quality: 0.82
+        });
+        setFormData(prev => ({ ...prev, heroImage: compressedBase64 }));
+      } catch (err) {
+        console.error('Failed to compress hero image', err);
+        setUploadError('Could not process hero image. Please try another image.');
+      } finally {
+        setUploadingHero(false);
+      }
     }
   };
 
-  const handleIntroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIntroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData(prev => ({ ...prev, introImage: reader.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadingIntro(true);
+      setUploadError(null);
+      try {
+        const compressedBase64 = await compressImageFile(file, {
+          maxWidth: 1400,
+          maxHeight: 1200,
+          quality: 0.82
+        });
+        setFormData(prev => ({ ...prev, introImage: compressedBase64 }));
+      } catch (err) {
+        console.error('Failed to compress intro image', err);
+        setUploadError('Could not process intro image. Please try another image.');
+      } finally {
+        setUploadingIntro(false);
+      }
     }
   };
 
@@ -130,16 +161,27 @@ export const AdminHomepage: React.FC = () => {
                 className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
               />
               <label className="px-3 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
-                <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
-                <span>Upload Photo</span>
+                {uploadingHero ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                    <span>Optimizing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                    <span>Upload Photo</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingHero}
                   onChange={handleHeroImageUpload}
                   className="hidden"
                 />
               </label>
             </div>
+            {uploadError && <p className="mt-1 text-xs text-rose-600">{uploadError}</p>}
             {formData.heroImage && (
               <div className="mt-2 aspect-[21/9] max-h-44 rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
                 <img
@@ -207,11 +249,21 @@ export const AdminHomepage: React.FC = () => {
                 className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
               />
               <label className="px-3 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
-                <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
-                <span>Upload Photo</span>
+                {uploadingIntro ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                    <span>Optimizing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                    <span>Upload Photo</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingIntro}
                   onChange={handleIntroImageUpload}
                   className="hidden"
                 />

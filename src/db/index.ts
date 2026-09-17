@@ -50,9 +50,10 @@ class LocalDatabase {
   private setItem<T>(key: string, value: T): void {
     try {
       localStorage.setItem(DB_PREFIX + key, JSON.stringify(value));
-      window.dispatchEvent(new CustomEvent('greenrefurb_db_updated', { detail: { key } }));
     } catch (e) {
       console.error(`Error saving to localStorage key ${key}`, e);
+    } finally {
+      window.dispatchEvent(new CustomEvent('greenrefurb_db_updated', { detail: { key } }));
     }
   }
 

@@ -13,25 +13,42 @@ import {
   Search,
   MapPin,
   Calendar,
-  Upload
+  Upload,
+  Check,
+  Loader2
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export const AdminProjects: React.FC = () => {
   const { projects, addProject, updateProject, deleteProject } = useApp();
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [search, setSearch] = useState('');
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const showNotification = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setEditingProject(prev => prev ? { ...prev, coverImage: reader.result as string } : null);
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadingCover(true);
+      try {
+        const compressed = await compressImageFile(file, {
+          maxWidth: 1400,
+          maxHeight: 1200,
+          quality: 0.82
+        });
+        setEditingProject(prev => prev ? { ...prev, coverImage: compressed } : null);
+      } catch (err) {
+        console.error('Error compressing project cover', err);
+        showNotification('Failed to process image. Please try another photo.');
+      } finally {
+        setUploadingCover(false);
+      }
     }
   };
 
@@ -69,8 +86,10 @@ export const AdminProjects: React.FC = () => {
 
     if (isNew) {
       addProject(editingProject);
+      showNotification(`Project "${editingProject.title}" created and synced!`);
     } else {
       updateProject(editingProject);
+      showNotification(`Project "${editingProject.title}" updated and synced!`);
     }
     setEditingProject(null);
   };
@@ -78,15 +97,18 @@ export const AdminProjects: React.FC = () => {
   const handleDelete = (id: string, title: string) => {
     if (confirm(`Are you sure you want to delete project "${title}"?`)) {
       deleteProject(id);
+      showNotification(`Project "${title}" deleted successfully!`);
     }
   };
 
   const togglePublish = (project: ProjectItem) => {
     updateProject({ ...project, published: !project.published });
+    showNotification('Project visibility updated!');
   };
 
   const toggleFeatured = (project: ProjectItem) => {
     updateProject({ ...project, featured: !project.featured });
+    showNotification('Featured status updated!');
   };
 
   const filtered = projects.filter(p =>
@@ -105,13 +127,22 @@ export const AdminProjects: React.FC = () => {
             Showcase residential refurbishments, commercial projects, bespoke joinery, and decorator case studies
           </p>
         </div>
-        <button
-          onClick={handleCreateNew}
-          className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Project</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {feedback && (
+            <div className="px-3 py-1.5 bg-[#EAF5EC] text-[#315C3A] border border-[#DCEBDD] rounded-xl text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <Check className="w-3.5 h-3.5 text-[#6FAF7B]" />
+              <span>{feedback}</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleCreateNew}
+            className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Project</span>
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -344,11 +375,21 @@ export const AdminProjects: React.FC = () => {
                     className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
                   />
                   <label className="px-3.5 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
-                    <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
-                    <span>Upload Photo</span>
+                    {uploadingCover ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                        <span>Optimizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={uploadingCover}
                       onChange={handleCoverUpload}
                       className="hidden"
                     />

@@ -10,15 +10,21 @@ import {
   Copy,
   ExternalLink,
   Upload,
-  X
+  X,
+  Edit2,
+  Loader2
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export const AdminGallery: React.FC = () => {
-  const { gallery, addGalleryItem, deleteGalleryItem } = useApp();
+  const { gallery, addGalleryItem, updateGalleryItem, deleteGalleryItem } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const [newItem, setNewItem] = useState({
     url: '',
@@ -27,20 +33,36 @@ export const AdminGallery: React.FC = () => {
     tags: 'refurbishment, painting'
   });
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const showNotification = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
+      setIsUploading(true);
+      try {
+        const compressed = await compressImageFile(file, {
+          maxWidth: 1400,
+          maxHeight: 1400,
+          quality: 0.8
+        });
+        if (isEditing && editingItem) {
+          setEditingItem(prev => prev ? { ...prev, url: compressed } : null);
+        } else {
           setNewItem(prev => ({
             ...prev,
-            url: reader.result as string,
+            url: compressed,
             title: prev.title || file.name.replace(/\.[^/.]+$/, '')
           }));
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Image compression error', err);
+        showNotification('Failed to process image. Please try another photo.');
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -62,12 +84,29 @@ export const AdminGallery: React.FC = () => {
       tags: 'refurbishment, painting'
     });
     setShowAddModal(false);
+    showNotification('Image added to gallery and synced successfully!');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    updateGalleryItem(editingItem);
+    setEditingItem(null);
+    showNotification('Gallery image updated and synced successfully!');
   };
 
   const handleCopy = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDelete = (id: string, title: string) => {
+    if (confirm(`Delete "${title}" from gallery?`)) {
+      deleteGalleryItem(id);
+      showNotification('Image deleted from gallery successfully!');
+    }
   };
 
   const filtered = gallery.filter(item => {
@@ -83,16 +122,26 @@ export const AdminGallery: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-[#202820]">Media Library & Gallery</h2>
           <p className="text-xs text-stone-500">
-            Upload and organize high-resolution images used across website banners, services, and project pages
+            Upload, edit, and organize high-resolution images used across website banners, services, and project pages
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Media Image</span>
-        </button>
+
+        <div className="flex items-center gap-3">
+          {feedback && (
+            <div className="px-3 py-1.5 bg-[#EAF5EC] text-[#315C3A] border border-[#DCEBDD] rounded-xl text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <Check className="w-3.5 h-3.5 text-[#6FAF7B]" />
+              <span>{feedback}</span>
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 bg-[#315C3A] hover:bg-[#202820] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Media Image</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -144,7 +193,7 @@ export const AdminGallery: React.FC = () => {
             </div>
 
             <div className="p-3">
-              <div className="font-bold text-[#202820] text-xs truncate">
+              <div className="font-bold text-[#202820] text-xs truncate" title={item.title}>
                 {item.title}
               </div>
 
@@ -161,6 +210,14 @@ export const AdminGallery: React.FC = () => {
                   )}
                 </button>
 
+                <button
+                  onClick={() => setEditingItem({ ...item })}
+                  className="p-1.5 text-stone-500 hover:text-[#315C3A] hover:bg-[#EAF5EC] rounded-lg transition-colors cursor-pointer"
+                  title="Edit image details or replace photo"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+
                 <a
                   href={item.url}
                   target="_blank"
@@ -172,11 +229,7 @@ export const AdminGallery: React.FC = () => {
                 </a>
 
                 <button
-                  onClick={() => {
-                    if (confirm('Delete this image from gallery?')) {
-                      deleteGalleryItem(item.id);
-                    }
-                  }}
+                  onClick={() => handleDelete(item.id, item.title)}
                   className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                   title="Delete Image"
                 >
@@ -198,7 +251,7 @@ export const AdminGallery: React.FC = () => {
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 flex items-center justify-center cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -219,12 +272,22 @@ export const AdminGallery: React.FC = () => {
                     className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
                   />
                   <label className="px-3.5 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
-                    <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
-                    <span>Upload</span>
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                        <span>Optimizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                        <span>Upload</span>
+                      </>
+                    )}
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                      onChange={(e) => handleFileUpload(e, false)}
                       className="hidden"
                     />
                   </label>
@@ -291,15 +354,146 @@ export const AdminGallery: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50"
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#315C3A] hover:bg-[#202820] text-white font-bold"
+                  className="px-5 py-2 rounded-xl bg-[#315C3A] hover:bg-[#202820] text-white font-bold cursor-pointer"
                 >
                   Add to Gallery
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Image Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#DCEBDD] p-6">
+            <div className="flex items-center justify-between pb-3 border-b border-[#DCEBDD] mb-4">
+              <h3 className="text-base font-bold text-[#202820]">
+                Edit Gallery Image
+              </h3>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#202820] mb-1">
+                  Photo (URL or Replace from Device) *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={editingItem.url}
+                    onChange={e => setEditingItem({ ...editingItem, url: e.target.value })}
+                    placeholder="Paste image URL or upload below"
+                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
+                  />
+                  <label className="px-3.5 py-2 bg-[#EAF5EC] hover:bg-[#DCEBDD] text-[#315C3A] rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-[#DCEBDD] transition-colors shrink-0">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-[#6FAF7B] animate-spin" />
+                        <span>Optimizing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-[#6FAF7B]" />
+                        <span>Replace</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isUploading}
+                      onChange={(e) => handleFileUpload(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {editingItem.url && (
+                <div className="aspect-video w-full rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
+                  <img
+                    src={editingItem.url}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-[#202820] mb-1">
+                  Title / Caption *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingItem.title}
+                  onChange={e => setEditingItem({ ...editingItem, title: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-[#202820] mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={editingItem.category}
+                    onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-white focus:outline-none focus:border-[#6FAF7B]"
+                  >
+                    <option value="Interior">Interior</option>
+                    <option value="Exterior">Exterior</option>
+                    <option value="Commercial">Commercial</option>
+                    <option value="Residential">Residential</option>
+                    <option value="Carpentry">Carpentry</option>
+                    <option value="Kitchen">Kitchen</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#202820] mb-1">
+                    Tags (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.tags?.join(', ') || ''}
+                    onChange={e => setEditingItem({
+                      ...editingItem,
+                      tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
+                    })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#6FAF7B]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#315C3A] hover:bg-[#202820] text-white font-bold cursor-pointer"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

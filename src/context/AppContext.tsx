@@ -56,6 +56,7 @@ interface AppContextType {
   deleteProject: (id: string) => void;
   saveGalleryItem: (item: GalleryItem) => void;
   addGalleryItem: (item: Omit<GalleryItem, 'id' | 'uploadedAt'> & Partial<GalleryItem>) => void;
+  updateGalleryItem: (item: GalleryItem) => void;
   deleteGalleryItem: (id: string) => void;
   saveTestimonial: (item: TestimonialItem) => void;
   addTestimonial: (item: TestimonialItem) => void;
@@ -83,17 +84,32 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Helper to extract clean path from pathname or hash fallback
+  // Helper to extract clean path from pathname or hash/query fallback
   const resolveCurrentPath = (): string => {
-    // 1. Check if pathname has a route (like /admin, /services, etc.)
+    // 1. Query parameter fallback (e.g. /?admin or /?page=admin)
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.has('admin') || searchParams.get('page') === 'admin') {
+        return '/admin';
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Check if pathname has a route (like /admin, /services, etc.)
     const pathname = window.location.pathname || '/';
     if (pathname !== '/' && pathname.trim() !== '') {
       return pathname.replace(/\/+$/, '') || '/';
     }
-    // 2. Hash fallback (e.g., /#admin or /#/admin or /#contact)
+
+    // 3. Hash fallback (e.g., /#admin or /#/admin or /#contact)
     if (window.location.hash) {
-      const hash = window.location.hash.replace(/^#\/?/, '/');
-      if (hash.startsWith('/admin') || hash.length > 1) {
+      const rawHash = window.location.hash.replace(/^#\/?/, '');
+      if (rawHash === 'admin' || rawHash.startsWith('admin/')) {
+        return `/${rawHash}`;
+      }
+      const hash = `/${rawHash}`;
+      if (hash.length > 1) {
         return hash.split('?')[0].replace(/\/+$/, '') || '/';
       }
     }
@@ -254,40 +270,138 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const openLightbox = (url: string) => setLightboxUrl(url);
   const closeLightbox = () => setLightboxUrl(null);
 
-  const saveService = (s: ServiceItem) => db.saveService(s);
-  const deleteService = (id: string) => db.deleteService(id);
+  const saveService = (s: ServiceItem) => {
+    setServices(prev => {
+      const idx = prev.findIndex(item => item.id === s.id);
+      return idx >= 0 ? prev.map((item, i) => i === idx ? s : item) : [...prev, s];
+    });
+    db.saveService(s);
+  };
 
-  const saveProject = (p: ProjectItem) => db.saveProject(p);
-  const deleteProject = (id: string) => db.deleteProject(id);
+  const deleteService = (id: string) => {
+    setServices(prev => prev.filter(item => item.id !== id));
+    db.deleteService(id);
+  };
 
-  const saveGalleryItem = (g: GalleryItem) => db.saveGalleryItem(g);
-  const deleteGalleryItem = (id: string) => db.deleteGalleryItem(id);
+  const saveProject = (p: ProjectItem) => {
+    setProjects(prev => {
+      const idx = prev.findIndex(item => item.id === p.id);
+      return idx >= 0 ? prev.map((item, i) => i === idx ? p : item) : [p, ...prev];
+    });
+    db.saveProject(p);
+  };
 
-  const saveTestimonial = (t: TestimonialItem) => db.saveTestimonial(t);
-  const deleteTestimonial = (id: string) => db.deleteTestimonial(id);
+  const deleteProject = (id: string) => {
+    setProjects(prev => prev.filter(item => item.id !== id));
+    db.deleteProject(id);
+  };
 
-  const saveSettings = (s: SiteSettings) => db.saveSettings(s);
-  const saveHomepage = (h: HomepageContent) => db.saveHomepage(h);
-  const saveTeam = (t: TeamMember[]) => db.saveTeam(t);
-  const saveSEO = (s: PageSEO) => db.saveSEO(s);
+  const saveGalleryItem = (g: GalleryItem) => {
+    setGallery(prev => {
+      const idx = prev.findIndex(item => item.id === g.id);
+      return idx >= 0 ? prev.map((item, i) => i === idx ? g : item) : [g, ...prev];
+    });
+    db.saveGalleryItem(g);
+  };
+
+  const deleteGalleryItem = (id: string) => {
+    setGallery(prev => prev.filter(item => item.id !== id));
+    db.deleteGalleryItem(id);
+  };
+
+  const saveTestimonial = (t: TestimonialItem) => {
+    setTestimonials(prev => {
+      const idx = prev.findIndex(item => item.id === t.id);
+      return idx >= 0 ? prev.map((item, i) => i === idx ? t : item) : [t, ...prev];
+    });
+    db.saveTestimonial(t);
+  };
+
+  const deleteTestimonial = (id: string) => {
+    setTestimonials(prev => prev.filter(item => item.id !== id));
+    db.deleteTestimonial(id);
+  };
+
+  const saveSettings = (s: SiteSettings) => {
+    setSettings(s);
+    db.saveSettings(s);
+  };
+
+  const saveHomepage = (h: HomepageContent) => {
+    setHomepage(h);
+    db.saveHomepage(h);
+  };
+
+  const saveTeam = (t: TeamMember[]) => {
+    setTeam(t);
+    db.saveTeam(t);
+  };
+
+  const saveSEO = (s: PageSEO) => {
+    setAllSEO(prev => {
+      const idx = prev.findIndex(item => item.path === s.path);
+      return idx >= 0 ? prev.map((item, i) => i === idx ? s : item) : [...prev, s];
+    });
+    db.saveSEO(s);
+  };
 
   const addEnquiry = (enquiry: Omit<ContactEnquiry, 'id' | 'createdAt' | 'status'> & Partial<ContactEnquiry>) => {
-    return db.addEnquiry(enquiry);
+    const res = db.addEnquiry(enquiry);
+    setEnquiries(prev => [res, ...prev.filter(e => e.id !== res.id)]);
+    return res;
   };
 
   const updateEnquiryStatus = (id: string, status: 'New' | 'Contacted' | 'Completed') => {
+    setEnquiries(prev => prev.map(e => e.id === id ? { ...e, status } : e));
     db.updateEnquiryStatus(id, status);
   };
 
-  const deleteEnquiry = (id: string) => db.deleteEnquiry(id);
+  const deleteEnquiry = (id: string) => {
+    setEnquiries(prev => prev.filter(e => e.id !== id));
+    db.deleteEnquiry(id);
+  };
 
-  const login = (u: string, p: string) => db.login(u, p);
-  const logout = () => db.logout();
+  const login = (u: string, p: string) => {
+    const res = db.login(u, p);
+    if (res.success && res.user) {
+      setCurrentUser(res.user);
+    }
+    return res;
+  };
+  const logout = () => {
+    db.logout();
+    setCurrentUser(null);
+  };
   const changePassword = (o: string, n: string) => db.changeAdminPassword(o, n);
 
-  const resetDatabase = () => db.resetAll();
+  const resetDatabase = () => {
+    db.resetAll();
+    setServices(db.getServices());
+    setProjects(db.getProjects());
+    setGallery(db.getGallery());
+    setTestimonials(db.getTestimonials());
+    setSettings(db.getSettings());
+    setHomepage(db.getHomepage());
+    setTeam(db.getTeam());
+    setEnquiries(db.getEnquiries());
+    setAllSEO(db.getAllSEO());
+  };
   const exportBackup = () => db.exportBackup();
-  const importBackup = (json: string) => db.importBackup(json);
+  const importBackup = (json: string) => {
+    const ok = db.importBackup(json);
+    if (ok) {
+      setServices(db.getServices());
+      setProjects(db.getProjects());
+      setGallery(db.getGallery());
+      setTestimonials(db.getTestimonials());
+      setSettings(db.getSettings());
+      setHomepage(db.getHomepage());
+      setTeam(db.getTeam());
+      setEnquiries(db.getEnquiries());
+      setAllSEO(db.getAllSEO());
+    }
+    return ok;
+  };
 
   return (
     <AppContext.Provider
@@ -324,11 +438,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateProject: saveProject,
         deleteProject,
         saveGalleryItem,
-        addGalleryItem: (item) => db.saveGalleryItem({
-          ...item,
-          id: item.id || `gal-${Date.now()}`,
-          uploadedAt: item.uploadedAt || new Date().toISOString()
-        } as GalleryItem),
+        addGalleryItem: (item) => {
+          const fullItem: GalleryItem = {
+            ...item,
+            id: item.id || `gal-${Date.now()}`,
+            uploadedAt: item.uploadedAt || new Date().toISOString()
+          } as GalleryItem;
+          saveGalleryItem(fullItem);
+        },
+        updateGalleryItem: saveGalleryItem,
         deleteGalleryItem,
         saveTestimonial,
         addTestimonial: saveTestimonial,
